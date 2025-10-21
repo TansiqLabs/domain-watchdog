@@ -1,0 +1,39 @@
+name: Check Domain Expiry
+
+on:
+  # 1. Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+  
+  # 2. Runs automatically on a schedule
+  schedule:
+    # Runs at 22:00 UTC every day
+    # (This is 4:00 AM Bangladesh time, UTC+6)
+    - cron: '0 22 * * *'
+
+jobs:
+  check-domains:
+    # Runs on the latest version of Ubuntu
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Downloads your repository code
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # Step 2: Sets up Python 3.10
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      # Step 3: Installs the necessary Python libraries
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      
+      # Step 4: Runs your domain check script
+      - name: Run domain check script
+        run: python check_domains.py
+        env:
+          # Passes the WEBHOOK_URL secret to your script
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
