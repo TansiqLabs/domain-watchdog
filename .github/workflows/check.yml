@@ -35,5 +35,9 @@ jobs:
       - name: Run domain check script
         run: python check_domains.py
         env:
-          # Passes the WEBHOOK_URL secret to your script
-          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+          # Passes ALL secrets to your script.
+          DOMAINS_LIST: ${{ secrets.DOMAINS_LIST }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
