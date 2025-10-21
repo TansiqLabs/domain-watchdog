@@ -10,11 +10,11 @@ DOMAINS_SECRET = os.environ.get("DOMAINS_LIST")
 
 # 2. Notification schedule (days before expiration)
 # A. Notify on these specific days
-NOTIFY_SPECIFIC_DAYS = [60, 45, 30, 15]
+NOTIFY_SPECIFIC_DAYS = [60, 45, 30, 15, 330]
 
 # B. Start sending daily notifications this many days before expiry
 # (Setting this to 7 means you get alerts on 7, 6, 5, 4, 3, 2, 1, and 0)
-NOTIFY_DAILY_BEFORE_DAYS = 7
+NOTIFY_DAILY_BEFORE_DAYS = 365
 
 # 3. Notification Service Secrets (from GitHub Secrets)
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
