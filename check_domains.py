@@ -10,7 +10,7 @@ DOMAINS_SECRET = os.environ.get("DOMAINS_LIST")
 
 # 2. Notification schedule (days before expiration)
 # A. Notify on these specific days
-NOTIFY_SPECIFIC_DAYS = [60, 45, 30, 15, 330]
+NOTIFY_SPECIFIC_DAYS = [60, 45, 30, 15]
 
 # B. Start sending daily notifications this many days before expiry
 # (Setting this to 7 means you get alerts on 7, 6, 5, 4, 3, 2, 1, and 0)
