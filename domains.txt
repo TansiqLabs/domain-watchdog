@@ -1,9 +1,0 @@
-# Add your domains here, one per line.
-# Lines starting with # and empty lines will be ignored.
-
-tansiqlabs.com
-tansiqlabs.dev
-tansiqlabs.online
-tansiqhub.com
-tansiqoverseas.com
-tansiqwatch.net
