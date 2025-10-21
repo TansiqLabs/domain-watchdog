@@ -8,7 +8,7 @@ This repository is a **template**. You can use it to create your own monitor wit
 
 ## 🚀 How to Use This Template
 
-You only need to set **two secrets**.
+You only need to set **two secrets** (domain list + notification service).
 
 ### Step 1: Create Your Repository
 Click the **"Use this template"** button at the top of this page and create a new repository under your own account.

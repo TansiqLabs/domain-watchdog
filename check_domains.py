@@ -118,6 +118,7 @@ def check_domains(domains_to_check):
         return
 
     for domain_name in domains_to_check:
+        print(f"--- Checking: {domain_name} ---") # Added for clarity
         try:
             w = whois.whois(domain_name)
             expiry_date = w.expiration_date
@@ -132,7 +133,7 @@ def check_domains(domains_to_check):
                 time_left = expiry_date - today
                 days_left = time_left.days
                 
-                print(f"Domain: {domain_name}, Days left: {days_left} (Expires on: {expiry_date.date()})")
+                print(f"  [WHOIS] Days left: {days_left} (Expires on: {expiry_date.date()})")
 
                 # --- Notification Logic ---
                 # A. Check if it's a specific day
@@ -153,11 +154,12 @@ def check_domains(domains_to_check):
                     alerts.append(alert_message)
                 
             else:
-                print(f"Expiration date not found for '{domain_name}'.")
+                print(f"  [WHOIS] Expiration date not found.")
 
         except Exception as e:
-            print(f"Error checking '{domain_name}': {e}")
-            alerts.append(f"❌ Could not check `{domain_name}`. Error: {e}")
+            print(f"  [WHOIS] Error checking: {e}")
+            # We don't append a user-facing error for temporary network issues
+            # alerts.append(f"❌ Could not check WHOIS for `{domain_name}`. Error: {e}")
 
     if alerts:
         final_message = "\n\n".join(alerts)

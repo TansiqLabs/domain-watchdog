@@ -28,8 +28,7 @@ jobs:
 
       # Step 3: Installs the necessary Python libraries
       - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
       
       # Step 4: Runs your domain check script
       - name: Run domain check script
