@@ -5,54 +5,111 @@ import os
 
 # --- Settings ---
 
-# The script now reads domains from 'domains.txt'
-DOMAIN_FILE = "domains.txt" 
+# 1. Domains loaded from GitHub Secret 'DOMAINS_LIST'
+DOMAINS_SECRET = os.environ.get("DOMAINS_LIST")
 
-# 1. Notification schedule (days before expiration)
-NOTIFY_DAYS = [60, 45, 30, 15, 7, 6, 5, 4, 3, 2, 1, 0]
+# 2. Notification schedule (days before expiration)
+# A. Notify on these specific days
+NOTIFY_SPECIFIC_DAYS = [60, 45, 30, 15]
 
-# 2. Webhook URL (from GitHub Secrets)
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
+# B. Start sending daily notifications this many days before expiry
+# (Setting this to 7 means you get alerts on 7, 6, 5, 4, 3, 2, 1, and 0)
+NOTIFY_DAILY_BEFORE_DAYS = 7
+
+# 3. Notification Service Secrets (from GitHub Secrets)
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
+SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL")
 
 # --- Main Script ---
 
-def get_domains_from_file(filename):
-    """Reads a list of domains from a text file."""
+def get_domains_from_secret(secret_data):
+    """Reads domains from the multi-line secret string."""
+    if not secret_data:
+        print("ERROR: DOMAINS_LIST secret is not set.")
+        return []
+    
     domains = []
-    try:
-        with open(filename, 'r') as f:
-            for line in f:
-                line = line.strip()
-                # Ignore empty lines and comments
-                if line and not line.startswith('#'):
-                    domains.append(line)
-        print(f"Successfully loaded {len(domains)} domains from {filename}.")
-    except FileNotFoundError:
-        print(f"ERROR: Domain file '{filename}' not found.")
-    except Exception as e:
-        print(f"ERROR: Could not read domain file: {e}")
+    for line in secret_data.splitlines():
+        line = line.strip()
+        # Ignore empty lines and comments
+        if line and not line.startswith('#'):
+            domains.append(line)
+            
+    print(f"Successfully loaded {len(domains)} domains from secret.")
     return domains
 
-def send_webhook(message):
-    """Sends a message to the webhook."""
-    if not WEBHOOK_URL:
-        print("WEBHOOK_URL not found. Is the GitHub Secret set?")
-        return
+# --- Notification Functions ---
+
+def send_telegram_message(message):
+    """Sends a message via Telegram."""
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    # Escape special chars for Telegram MarkdownV2
+    safe_message = message.replace('.', r'\.').replace('-', r'\-').replace('(', r'\(').replace(')', r'\)').replace('!', r'\!')
+    payload = {'chat_id': TELEGRAM_CHAT_ID, 'text': safe_message, 'parse_mode': 'MarkdownV2'}
     try:
-        # 'content' for Discord, 'text' for Slack
-        payload = {"content": message} 
-        requests.post(WEBHOOK_URL, json=payload)
-        print(f"Webhook sent: {message}")
+        response = requests.post(url, json=payload)
+        if response.status_code == 200:
+            print("Telegram message sent successfully.")
+        else:
+            print(f"Failed to send Telegram message: {response.status_code} - {response.text}")
     except Exception as e:
-        print(f"Failed to send webhook: {e}")
+        print(f"Failed to send Telegram message: {e}")
+
+def send_discord_webhook(message):
+    """Sends a message via Discord Webhook."""
+    try:
+        payload = {"content": message}
+        response = requests.post(DISCORD_WEBHOOK_URL, json=payload)
+        print("Discord message sent successfully.")
+    except Exception as e:
+        print(f"Failed to send Discord message: {e}")
+
+def send_slack_webhook(message):
+    """Sends a message via Slack Webhook."""
+    try:
+        # Slack uses *bold* instead of **bold**
+        safe_message = message.replace('**', '*')
+        payload = {"text": safe_message}
+        response = requests.post(SLACK_WEBHOOK_URL, json=payload)
+        print("Slack message sent successfully.")
+    except Exception as e:
+        print(f"Failed to send Slack message: {e}")
+
+def send_notification(message):
+    """Checks ALL configured notification services and sends alerts to each one."""
+    service_configured = False 
+
+    # --- Check for Telegram ---
+    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+        print("Telegram service configured. Sending message...")
+        send_telegram_message(message)
+        service_configured = True
+        
+    # --- Check for Discord ---
+    if DISCORD_WEBHOOK_URL:
+        print("Discord service configured. Sending message...")
+        send_discord_webhook(message)
+        service_configured = True
+        
+    # --- Check for Slack ---
+    if SLACK_WEBHOOK_URL:
+        print("Slack service configured. Sending message...")
+        send_slack_webhook(message)
+        service_configured = True
+        
+    # --- If no services are configured ---
+    if not service_configured:
+        print("No notification service is configured (Telegram, Discord, or Slack).")
+
+# --- Domain Checking Logic ---
 
 def check_domains(domains_to_check):
     """Checks domain expiration."""
-    
-    # FIX: Use offset-aware UTC time for 'today'
+    # Use offset-aware UTC time for correct subtraction
     today = datetime.datetime.now(datetime.timezone.utc)
-    
-    alerts = [] # All alerts will be collected here
+    alerts = []
 
     print(f"Today's date: {today.date()}. Starting domain check...")
 
@@ -63,13 +120,12 @@ def check_domains(domains_to_check):
     for domain_name in domains_to_check:
         try:
             w = whois.whois(domain_name)
-            
             expiry_date = w.expiration_date
             if isinstance(expiry_date, list):
                 expiry_date = expiry_date[0] # Take the first date if it's a list
 
             if expiry_date:
-                # If expiry_date is naive, assume it's UTC (this is rare but safe)
+                # Ensure expiry_date is also offset-aware (assume UTC if naive)
                 if expiry_date.tzinfo is None:
                     expiry_date = expiry_date.replace(tzinfo=datetime.timezone.utc)
                 
@@ -78,7 +134,17 @@ def check_domains(domains_to_check):
                 
                 print(f"Domain: {domain_name}, Days left: {days_left} (Expires on: {expiry_date.date()})")
 
-                if days_left in NOTIFY_DAYS:
+                # --- Notification Logic ---
+                # A. Check if it's a specific day
+                should_notify = (days_left in NOTIFY_SPECIFIC_DAYS)
+                
+                # B. Check if it's in the daily notification range
+                if not should_notify:
+                    if 0 <= days_left <= NOTIFY_DAILY_BEFORE_DAYS:
+                        should_notify = True
+                # --- ------------------- ---
+
+                if should_notify:
                     alert_message = (
                         f"🚨 **Domain Alert** 🚨\n"
                         f"`{domain_name}` will expire in **{days_left}** days!\n"
@@ -93,13 +159,12 @@ def check_domains(domains_to_check):
             print(f"Error checking '{domain_name}': {e}")
             alerts.append(f"❌ Could not check `{domain_name}`. Error: {e}")
 
-    # Send a single webhook if there are any alerts
     if alerts:
         final_message = "\n\n".join(alerts)
-        send_webhook(final_message)
+        send_notification(final_message)
     else:
         print("All domains are fine. No alerts.")
 
 if __name__ == "__main__":
-    domains = get_domains_from_file(DOMAIN_FILE)
+    domains = get_domains_from_secret(DOMAINS_SECRET)
     check_domains(domains)
