@@ -8,24 +8,13 @@ This repository is a **template**. You can use it to create your own monitor wit
 
 ## 🚀 How to Use This Template
 
-You only need to set **two secrets** (domain list + notification service).
+You only need to edit **one file** and set **one secret**.
 
 ### Step 1: Create Your Repository
 Click the **"Use this template"** button at the top of this page and create a new repository under your own account.
 
-### Step 2: Set Your Domain List (Private)
-Your domain list is kept private using GitHub Secrets.
-
-1.  Go to your new repository's **Settings** > **Secrets and variables** > **Actions**.
-2.  Click **New repository secret**.
-3.  **Name:** `DOMAINS_LIST`
-4.  **Secret (Value):** Paste your domains here, **one per line**.
-    ```
-    # You can add comments
-    your-domain.com
-    another-domain.org
-    example.dev
-    ```
+### Step 2: Add Your Domains
+In your new repository, edit the `domains.txt` file. Add your domains, one per line.
 
 ### Step 3: Configure Notifications (Choose One or More)
 Add secrets for **all** the notification services you want to use. Alerts will be sent to every service you configure.
