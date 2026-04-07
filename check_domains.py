@@ -1,76 +1,93 @@
-import whois
-import requests
-import datetime
+from __future__ import annotations
+
+import datetime as dt
 import os
-import ssl
 import socket
+import ssl
+from pathlib import Path
+from typing import Iterable
 
-# --- Settings ---
+import requests
+import whois
 
-# 1. Domains will be loaded from this file
-DOMAIN_FILE = "domains.txt"
+DOMAIN_FILE = Path("domains.txt")
 
-# 2. WHOIS Notification schedule
-NOTIFY_WHOIS_SPECIFIC_DAYS = [60, 45, 30, 15]
-NOTIFY_WHOIS_DAILY_BEFORE_DAYS = 10 # 10 দিন আগে থেকে প্রতিদিন
+NOTIFY_WHOIS_SPECIFIC_DAYS = {60, 45, 30, 15}
+NOTIFY_WHOIS_DAILY_BEFORE_DAYS = 10
 
-# 3. SSL Notification schedule
-NOTIFY_SSL_SPECIFIC_DAYS = [30, 15, 7]
-NOTIFY_SSL_DAILY_BEFORE_DAYS = 3  # 3 দিন আগে থেকে প্রতিদিন
+NOTIFY_SSL_SPECIFIC_DAYS = {30, 15, 7}
+NOTIFY_SSL_DAILY_BEFORE_DAYS = 3
 
-# 4. Notification Service Secrets
+REQUEST_TIMEOUT_SECONDS = 10
+SSL_TIMEOUT_SECONDS = 5
+
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL")
 
-# --- Main Script ---
 
-def get_domains_from_file(filename):
-    """Reads a list of domains from a text file."""
-    domains = []
+def get_domains_from_file(filename: Path) -> list[str]:
+    domains: list[str] = []
     try:
-        with open(filename, 'r') as f:
-            for line in f:
-                line = line.strip()
-                # Ignore empty lines and comments
-                if line and not line.startswith('#'):
-                    domains.append(line)
+        for line in filename.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#"):
+                domains.append(line)
         print(f"Successfully loaded {len(domains)} domains from {filename}.")
     except FileNotFoundError:
         print(f"ERROR: Domain file '{filename}' not found.")
-    except Exception as e:
-        print(f"ERROR: Could not read domain file: {e}")
+    except OSError as exc:
+        print(f"ERROR: Could not read domain file: {exc}")
     return domains
 
-# --- Notification Functions (No changes needed) ---
 
-def send_telegram_message(message):
+def escape_telegram_markdown(message: str) -> str:
+    reserved = r"_[]()~`>#+-=|{}.!"
+    escaped = message
+    for char in reserved:
+        escaped = escaped.replace(char, f"\\{char}")
+    return escaped
+
+
+def post_json(url: str, payload: dict[str, object]) -> requests.Response:
+    return requests.post(url, json=payload, timeout=REQUEST_TIMEOUT_SECONDS)
+
+
+def send_telegram_message(message: str) -> None:
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    safe_message = message.replace('.', r'\.').replace('-', r'\-').replace('(', r'\(').replace(')', r'\)').replace('!', r'\!')
-    payload = {'chat_id': TELEGRAM_CHAT_ID, 'text': safe_message, 'parse_mode': 'MarkdownV2'}
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": escape_telegram_markdown(message),
+        "parse_mode": "MarkdownV2",
+    }
     try:
-        response = requests.post(url, json=payload)
-        if response.status_code == 200: print("Telegram message sent successfully.")
-        else: print(f"Failed to send Telegram message: {response.status_code} - {response.text}")
-    except Exception as e: print(f"Failed to send Telegram message: {e}")
+        response = post_json(url, payload)
+        response.raise_for_status()
+        print("Telegram message sent successfully.")
+    except requests.RequestException as exc:
+        print(f"Failed to send Telegram message: {exc}")
 
-def send_discord_webhook(message):
+
+def send_discord_webhook(message: str) -> None:
     try:
-        payload = {"content": message}
-        requests.post(DISCORD_WEBHOOK_URL, json=payload)
+        response = post_json(DISCORD_WEBHOOK_URL, {"content": message})
+        response.raise_for_status()
         print("Discord message sent successfully.")
-    except Exception as e: print(f"Failed to send Discord message: {e}")
+    except requests.RequestException as exc:
+        print(f"Failed to send Discord message: {exc}")
 
-def send_slack_webhook(message):
+
+def send_slack_webhook(message: str) -> None:
     try:
-        safe_message = message.replace('**', '*')
-        payload = {"text": safe_message}
-        requests.post(SLACK_WEBHOOK_URL, json=payload)
+        response = post_json(SLACK_WEBHOOK_URL, {"text": message.replace('**', '*')})
+        response.raise_for_status()
         print("Slack message sent successfully.")
-    except Exception as e: print(f"Failed to send Slack message: {e}")
+    except requests.RequestException as exc:
+        print(f"Failed to send Slack message: {exc}")
 
-def send_notification(message):
+
+def send_notification(message: str) -> None:
     service_configured = False
     if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
         print("Telegram service configured. Sending message...")
@@ -87,111 +104,115 @@ def send_notification(message):
     if not service_configured:
         print("No notification service is configured.")
 
-# --- Expiry Check Functions (No changes needed) ---
 
-def check_whois_expiry(domain_name, today_utc):
-    """Checks WHOIS (Domain) expiration."""
-    try:
-        w = whois.whois(domain_name)
-        expiry_date = w.expiration_date
-        if isinstance(expiry_date, list): expiry_date = expiry_date[0]
+def normalize_expiry_date(value: object) -> dt.datetime | None:
+    if isinstance(value, list):
+        for item in value:
+            normalized = normalize_expiry_date(item)
+            if normalized is not None:
+                return normalized
+        return None
 
-        if expiry_date:
-            if expiry_date.tzinfo is None:
-                expiry_date = expiry_date.replace(tzinfo=datetime.timezone.utc)
-            
-            time_left = expiry_date - today_utc
-            days_left = time_left.days
-            
-            print(f"  [WHOIS] Days left: {days_left} (Expires on: {expiry_date.date()})")
+    if isinstance(value, dt.datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=dt.timezone.utc)
+        return value.astimezone(dt.timezone.utc)
 
-            should_notify = (days_left in NOTIFY_WHOIS_SPECIFIC_DAYS)
-            if not should_notify:
-                if 0 <= days_left <= NOTIFY_WHOIS_DAILY_BEFORE_DAYS:
-                    should_notify = True
-            
-            if should_notify:
-                return (
-                    f"🚨 **Domain Alert** 🚨\n"
-                    f"`{domain_name}` will expire in **{days_left}** days!\n"
-                    f"(Expiration Date: {expiry_date.date()})"
-                )
-        else:
-            print(f"  [WHOIS] Expiration date not found.")
-    except Exception as e:
-        print(f"  [WHOIS] Error checking: {e}")
-        return f"❌ Could not check WHOIS for `{domain_name}`. Error: {e}"
+    if isinstance(value, dt.date):
+        return dt.datetime.combine(value, dt.time.min, tzinfo=dt.timezone.utc)
+
     return None
 
-def check_ssl_expiry(domain_name, today_utc):
-    """Checks SSL Certificate expiration."""
+
+def should_notify(days_left: int, specific_days: set[int], daily_before_days: int) -> bool:
+    return days_left in specific_days or 0 <= days_left <= daily_before_days
+
+
+def format_domain_alert(domain_name: str, days_left: int, expiry_date: dt.datetime) -> str:
+    return (
+        "Domain Alert\n"
+        f"{domain_name} will expire in {days_left} days.\n"
+        f"Expiration date: {expiry_date.date()}"
+    )
+
+
+def format_ssl_alert(domain_name: str, days_left: int, expiry_date: dt.datetime) -> str:
+    return (
+        "SSL Alert\n"
+        f"{domain_name} SSL certificate will expire in {days_left} days.\n"
+        f"Expiration date: {expiry_date.date()}"
+    )
+
+
+def check_whois_expiry(domain_name: str, today_utc: dt.datetime) -> str | None:
+    try:
+        record = whois.whois(domain_name)
+        expiry_date = normalize_expiry_date(record.expiration_date)
+        if expiry_date is None:
+            print("  [WHOIS] Expiration date not found.")
+            return None
+
+        days_left = (expiry_date - today_utc).days
+        print(f"  [WHOIS] Days left: {days_left} (Expires on: {expiry_date.date()})")
+
+        if should_notify(days_left, NOTIFY_WHOIS_SPECIFIC_DAYS, NOTIFY_WHOIS_DAILY_BEFORE_DAYS):
+            return format_domain_alert(domain_name, days_left, expiry_date)
+    except Exception as exc:
+        print(f"  [WHOIS] Error checking: {exc}")
+        return f"WHOIS check failed for {domain_name}: {exc}"
+    return None
+
+
+def check_ssl_expiry(domain_name: str, today_utc: dt.datetime) -> str | None:
     try:
         context = ssl.create_default_context()
-        with socket.create_connection((domain_name, 443), timeout=5) as sock:
-            with context.wrap_socket(sock, server_hostname=domain_name) as sslsock:
-                cert = sslsock.getpeercert()
-                expiry_date_str = cert['notAfter']
-                expiry_date = datetime.datetime.strptime(expiry_date_str, "%b %d %H:%M:%S %Y %Z")
-                expiry_date = expiry_date.replace(tzinfo=datetime.timezone.utc)
-                
-                time_left = expiry_date - today_utc
-                days_left = time_left.days
+        with socket.create_connection((domain_name, 443), timeout=SSL_TIMEOUT_SECONDS) as sock:
+            with context.wrap_socket(sock, server_hostname=domain_name) as ssl_sock:
+                cert = ssl_sock.getpeercert()
 
-                print(f"  [SSL] Days left: {days_left} (Expires on: {expiry_date.date()})")
-                
-                should_notify = (days_left in NOTIFY_SSL_SPECIFIC_DAYS)
-                if not should_notify:
-                    if 0 <= days_left <= NOTIFY_SSL_DAILY_BEFORE_DAYS:
-                        should_notify = True
-                
-                if should_notify:
-                    return (
-                        f"🛡️ **SSL Alert** 🛡️\n"
-                        f"`{domain_name}` SSL certificate will expire in **{days_left}** days!\n"
-                        f"(Expiration Date: {expiry_date.date()})"
-                    )
+        expiry_date = dt.datetime.strptime(cert["notAfter"], "%b %d %H:%M:%S %Y %Z")
+        expiry_date = expiry_date.replace(tzinfo=dt.timezone.utc)
+        days_left = (expiry_date - today_utc).days
+        print(f"  [SSL] Days left: {days_left} (Expires on: {expiry_date.date()})")
+
+        if should_notify(days_left, NOTIFY_SSL_SPECIFIC_DAYS, NOTIFY_SSL_DAILY_BEFORE_DAYS):
+            return format_ssl_alert(domain_name, days_left, expiry_date)
     except socket.timeout:
         print(f"  [SSL] Timeout checking {domain_name} (Port 443).")
-        return f"❌ SSL check for `{domain_name}` timed out. (Port 443 closed?)"
-    except (ssl.SSLError, socket.gaierror) as e:
-        print(f"  [SSL] Error checking {domain_name}: {e}")
-        return f"❌ SSL check for `{domain_name}` failed. (No SSL certificate?)"
-    except Exception as e:
-        print(f"  [SSL] Unknown error checking {domain_name}: {e}")
-        return f"❌ Unknown SSL error for `{domain_name}`: {e}"
+        return f"SSL check timed out for {domain_name}."
+    except (ssl.SSLError, socket.gaierror, OSError) as exc:
+        print(f"  [SSL] Error checking {domain_name}: {exc}")
+        return f"SSL check failed for {domain_name}: {exc}"
+    except Exception as exc:
+        print(f"  [SSL] Unknown error checking {domain_name}: {exc}")
+        return f"Unknown SSL error for {domain_name}: {exc}"
     return None
 
-# --- Main Domain Loop ---
 
-def check_all_domains(domains_to_check):
-    """Runs all checks for all domains."""
-    today_utc = datetime.datetime.now(datetime.timezone.utc)
-    alerts = []
+def check_all_domains(domains_to_check: Iterable[str]) -> None:
+    today_utc = dt.datetime.now(dt.timezone.utc)
+    alerts: list[str] = []
     print(f"Today's date: {today_utc.date()}. Starting all checks...")
-
-    if not domains_to_check:
-        print("No domains to check. Exiting.")
-        return
 
     for domain_name in domains_to_check:
         print(f"--- Checking: {domain_name} ---")
-        
-        # Check #1: WHOIS (Domain) Expiry
         whois_alert = check_whois_expiry(domain_name, today_utc)
         if whois_alert:
             alerts.append(whois_alert)
-        
-        # Check #2: SSL Certificate Expiry
+
         ssl_alert = check_ssl_expiry(domain_name, today_utc)
         if ssl_alert:
             alerts.append(ssl_alert)
 
     if alerts:
-        final_message = "\n\n".join(alerts)
-        send_notification(final_message)
+        send_notification("\n\n".join(alerts))
     else:
         print("All domains and SSL certs are fine. No alerts.")
 
+
 if __name__ == "__main__":
     domains = get_domains_from_file(DOMAIN_FILE)
-    check_all_domains(domains)
+    if not domains:
+        print("No domains to check. Exiting.")
+    else:
+        check_all_domains(domains)

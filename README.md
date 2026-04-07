@@ -1,60 +1,53 @@
-# Domain Watchdog 
-[![Check Domain Expiry](https://github.com/TansiqLabs/domain-watchdog/actions/workflows/check.yml/badge.svg)](https://github.com/TansiqLabs/domain-watchdog/actions/workflows/check.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+# Domain Watchdog
 
-A simple, serverless domain expiration monitor using Python and GitHub Actions. It checks a secret list of domains daily and sends alerts to multiple platforms (Telegram, Discord, Slack) if any domain is nearing its expiration date.
+Domain Watchdog is a lightweight Python monitor for domain and SSL expiry. It runs on GitHub Actions, reads domains from `domains.txt`, and sends alerts to Telegram, Discord, and Slack.
 
-This repository is a **template**. You can use it to create your own monitor with **zero cost**, **no server required**, and keep your domain list **private**.
+## Features
 
-## 🚀 How to Use This Template
+- Checks WHOIS domain expiry dates
+- Checks SSL certificate expiry dates
+- Supports Telegram, Discord, and Slack notifications
+- Runs on a daily GitHub Actions schedule or on demand
+- Keeps configuration simple with a plain `domains.txt` file
 
-You only need to edit **one file** and set **one secret**.
+## Requirements
 
-### Step 1: Create Your Repository
-Click the **"Use this template"** button at the top of this page and create a new repository under your own account.
+- Python 3.12 or later
+- A GitHub repository with Actions enabled
+- At least one notification service configured
 
-### Step 2: Add Your Domains
-In your new repository, edit the `domains.txt` file. Add your domains, one per line.
+## Setup
 
-### Step 3: Configure Notifications (Choose One or More)
-Add secrets for **all** the notification services you want to use. Alerts will be sent to every service you configure.
+1. Add domains to `domains.txt`, one domain per line.
+2. Add the notification secrets you want to use in GitHub Actions.
+3. Run the workflow manually once from the Actions tab.
 
-Go to your repository's **Settings** > **Secrets and variables** > **Actions** and add the secrets for your chosen service(s):
+## Supported Secrets
 
----
-#### Option 1: Telegram
-1.  Create a bot with **@BotFather** on Telegram to get a token.
-2.  Send `/start` to your new bot.
-3.  Find your `CHAT_ID` by visiting `https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates`.
-4.  Add these **two** secrets to GitHub:
-    * `TELEGRAM_BOT_TOKEN`: (Your bot token)
-    * `TELEGRAM_CHAT_ID`: (Your chat ID)
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
+- `DISCORD_WEBHOOK_URL`
+- `SLACK_WEBHOOK_URL`
 
----
-#### Option 2: Discord
-1.  In your Discord server, go to `Server Settings` > `Integrations` > `Webhooks`.
-2.  Create a new webhook and copy its URL.
-3.  Add this **one** secret to GitHub:
-    * `DISCORD_WEBHOOK_URL`: (Your webhook URL)
+## Schedule
 
----
-#### Option 3: Slack
-1.  Go to `https://api.slack.com/apps`, create a new app.
-2.  Enable `Incoming Webhooks` and add a new webhook to your workspace.
-3.  Copy the Webhook URL.
-4.  Add this **one** secret to GitHub:
-    * `SLACK_WEBHOOK_URL`: (Your webhook URL)
+The workflow runs daily at `22:00 UTC` and can also be triggered manually.
 
-**That's it!** The monitor will automatically run daily. You can also run it manually from the **Actions** tab.
+## Local Run
 
-## 🔧 Customization (Optional)
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python check_domains.py
+```
 
-If you want to change the notification schedule, edit the `check_domains.py` file:
+## Notes
 
-```python
-# A. Notify on these specific days
-NOTIFY_SPECIFIC_DAYS = [60, 45, 30, 15]
+- `domains.txt` supports blank lines and comment lines starting with `#`.
+- WHOIS and SSL alerts use separate notification thresholds in `check_domains.py`.
+- The GitHub Actions workflow uses Python 3.12 with pip caching.
 
-# B. Start sending daily notifications this many days before expiry
-# (Setting this to 7 means alerts on days 7, 6, 5, 4, 3, 2, 1, and 0)
-NOTIFY_DAILY_BEFORE_DAYS = 7
+## Support
+
+Developed by Tansiq Labs.

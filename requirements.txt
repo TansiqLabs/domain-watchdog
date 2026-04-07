@@ -1,2 +1,2 @@
-python-whois
-requests
+python-whois>=0.9.5,<1.0.0
+requests>=2.32.3,<3.0.0
